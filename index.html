@@ -766,6 +766,33 @@
     try{ var host = new URL(url).hostname; return 'https://www.google.com/s2/favicons?sz=64&domain=' + host; }
     catch(e){ return ''; }
   }
+  function directFaviconUrl(url){
+    try{ var u = new URL(url); return u.origin + '/favicon.ico'; }
+    catch(e){ return ''; }
+  }
+  // Tries: 1) custom icon the person set, 2) the site's own /favicon.ico, 3) Google's favicon
+  // service, 4) a letter avatar as a last resort. Google's service never technically "fails" -
+  // it silently returns a generic globe placeholder for sites it can't find an icon for, so
+  // trying the site's own favicon first avoids that placeholder in most cases.
+  function setBookmarkIcon(iconEl, bm){
+    iconEl.innerHTML = '';
+    if (state.settings.bmSettings.iconStyle === 'letter' && !bm.icon){
+      iconEl.textContent = (bm.name || '?').charAt(0).toUpperCase();
+      return;
+    }
+    var img = document.createElement('img');
+    img.alt = '';
+    var step = bm.icon ? 0 : 1;
+    function tryStep(){
+      if (step === 0 && bm.icon){ img.src = bm.icon; step = 1; return; }
+      if (step === 1){ img.src = directFaviconUrl(bm.url); step = 2; return; }
+      if (step === 2){ img.src = faviconUrl(bm.url); step = 3; return; }
+      iconEl.textContent = (bm.name || '?').charAt(0).toUpperCase();
+    }
+    img.onerror = tryStep;
+    iconEl.appendChild(img);
+    tryStep();
+  }
   function normalizeUrl(u){
     u = (u||'').trim();
     if (!u) return '';
@@ -792,15 +819,7 @@
 
       var icon = document.createElement('div');
       icon.className = 'bm-icon';
-      if (state.settings.bmSettings.iconStyle === 'letter'){
-        icon.textContent = (bm.name || '?').charAt(0).toUpperCase();
-      } else {
-        var img = document.createElement('img');
-        img.src = faviconUrl(bm.url);
-        img.alt = '';
-        img.onerror = function(){ icon.textContent = (bm.name||'?').charAt(0).toUpperCase(); };
-        icon.appendChild(img);
-      }
+      setBookmarkIcon(icon, bm);
 
       var label = document.createElement('div');
       label.className = 'bm-label';
@@ -858,6 +877,7 @@
       var row = document.createElement('div');
       row.className = 'bm-manage-item';
       row.draggable = true;
+      row.style.flexWrap = 'wrap';
 
       var grip = document.createElement('span');
       grip.className = 'grip'; grip.textContent = '\u2630';
@@ -865,6 +885,7 @@
       var nameInput = document.createElement('input');
       nameInput.className = 'txt-input';
       nameInput.value = bm.name;
+      nameInput.style.flex = '1';
       nameInput.addEventListener('input', function(){
         state.bookmarks[idx].name = nameInput.value;
         scheduleSave();
@@ -876,6 +897,7 @@
       var urlInput = document.createElement('input');
       urlInput.className = 'txt-input';
       urlInput.value = bm.url;
+      urlInput.style.flex = '1.4';
       urlInput.addEventListener('input', function(){
         state.bookmarks[idx].url = urlInput.value;
         scheduleSave();
@@ -895,6 +917,18 @@
         saveNow(); renderBookmarks(); renderManageList();
       });
 
+      var iconInput = document.createElement('input');
+      iconInput.className = 'txt-input';
+      iconInput.placeholder = 'Custom icon URL (optional)';
+      iconInput.value = bm.icon || '';
+      iconInput.style.flex = '1 0 100%';
+      iconInput.style.marginTop = '4px';
+      iconInput.addEventListener('input', function(){
+        state.bookmarks[idx].icon = iconInput.value.trim() || null;
+        scheduleSave();
+      });
+      iconInput.addEventListener('blur', function(){ saveNow(); renderBookmarks(); });
+
       row.addEventListener('dragstart', function(){ row.classList.add('dragging'); mgDragSrcIdx = idx; });
       row.addEventListener('dragend', function(){ row.classList.remove('dragging'); });
       row.addEventListener('dragover', function(e){ e.preventDefault(); });
@@ -911,6 +945,7 @@
       row.appendChild(nameInput);
       row.appendChild(urlInput);
       row.appendChild(del);
+      row.appendChild(iconInput);
       list.appendChild(row);
     });
   }
